@@ -1,7 +1,51 @@
 <template>
-<div>
+<div style="padding:24px; text-align:left;">
+
+
+  <el-select v-model="source" placeholder="请选择" @change="setSource">
+    <el-option
+      v-for="item in options"
+      :key="item.value"
+      :label="item.label"
+      :value="item.value">
+    </el-option>
+  </el-select>
+  <div style='text-align:left; padding:12px 0;'>
   Ticker, Vol: {{ticker.vol}}, Last: {{ticker.last}}, Sell: {{ticker.sell}}, Buy: {{ticker.buy}}, High: {{ticker.high}}, Low: {{ticker.low}}
+  </div>
+  <el-row>
+    <el-col :span="24">
   <chart :options="polar"></chart>
+      <el-table
+      :data="table" border
+      style="width: 600px; text-align:left; margin:24px 0;" height="420">
+      <el-table-column
+        prop="date"
+        label="date"
+        width="180">
+      </el-table-column>
+      <el-table-column
+        prop="open"
+        label="open"
+        width="180">
+      </el-table-column>
+      <el-table-column
+        prop="close"
+        label="close">
+      </el-table-column>
+      <el-table-column
+        prop="lowest"
+        label="lowest">
+      </el-table-column>
+      <el-table-column
+        prop="highest"
+        label="highest">
+      </el-table-column>
+    </el-table>
+
+
+    </el-col>
+  </el-row>
   <el-form ref="form" :model="form" label-width="80px" style="width: 480px; padding:24px; text-align:left;">
   <el-form-item label="TradeType">
     <el-radio-group v-model="form.tradeType">
@@ -20,6 +64,9 @@
   </el-form-item>
   <el-form-item label="Price">
     <el-input v-model="form.price" placeholder="price"></el-input>
+  </el-form-item>
+  <el-form-item label="OTP">
+    <el-input v-model="form.password" placeholder="One time password"></el-input>
   </el-form-item>
   <el-form-item>
     <el-button type="primary" @click="submitOrder">提交</el-button>
@@ -50,50 +97,83 @@ function calculateMA(dayCount, data) {
 
 export default {
   mounted() {
-    axios
-      .get("http://api.zb.com/data/v1/kline?market=ltc_usdt&type=1day")
-      .then(response => {
-        let rawData = response.data.data;
-        let dates = rawData.map(item => moment(item[0]).format("YYYY/MM/DD"));
-        let data = rawData.map(item => {
-          return [item[1], item[4], item[3], item[2]];
-        });
-        this.polar = getOption(data, dates);
-      });
-
     const socket = new WebSocket("wss://api.zb.com:9999/websocket");
 
     socket.addEventListener("open", event => {
-      //console.log(event);
-      console.log("open");
-      let data = {
-        event: "addChannel",
-        channel: "ltcusdt_ticker"
-      };
-      this.socket.send(JSON.stringify(data));
+      this.setSource();
+      console.log("socket open");
     });
     socket.addEventListener("message", event => {
       let data = JSON.parse(event.data);
-      this.ticker = data.ticker;
+      if(data.channel == this.channel){
+        this.ticker = data.ticker;
+      }
     });
     this.socket = socket;
   },
   data: function() {
     return {
+      options:[
+        {label:'比特币', value:'btc_usdt'},
+        {label:'莱特币', value:'ltc_usdt'}
+      ],
+      source: "ltc_usdt",
+      channel: "",
       polar: {},
       ticker: {},
+      table: [],
       form: {
         currency: "ltc_usdt",
         price: "",
         amount: "",
+        password: "",
         tradeType: "1"
       }
     };
   },
   methods: {
+    setSource() {
+      let source = this.source;
+      this.channel = source.replace('_','') + "_ticker";
+      axios
+        .get("http://api.zb.com/data/v1/kline?market=" + source + "&type=1day")
+        .then(response => {
+          let rawData = response.data.data;
+          let dates = rawData.map(item => moment(item[0]).format("YYYY/MM/DD"));
+          let data = rawData.map(item => {
+            return [item[1], item[4], item[3], item[2]];
+          });
+          this.table = rawData
+            .map(item => {
+              return {
+                date: moment(item[0]).format("YYYY/MM/DD"),
+                open: item[1],
+                close: item[4],
+                lowest: item[3],
+                highest: item[2]
+              };
+            })
+            .reverse();
+          this.polar = getOption(data, dates);
+        });
+
+      let data = {
+        event: "addChannel",
+        channel: this.channel
+      };
+      this.socket.send(JSON.stringify(data));
+    },
     submitOrder() {
-      console.log('submit order');
-      console.log(this.form);
+      let params = {
+        currency: this.form.currency,
+        price: this.form.price,
+        amount: this.form.amount,
+        tradeType: this.form.tradeType,
+        password: this.form.password
+      };
+      axios.post("/server/order", params).then(response => {
+        console.log(response.data);
+      });
     }
   }
 };
@@ -102,7 +182,7 @@ function getOption(data, dates) {
   var option = {
     backgroundColor: "#21202D",
     legend: {
-      data: ["日K", "MA5"],
+      data: ["日K", "MA20"],
       inactiveColor: "#777",
       textStyle: {
         color: "#fff"
@@ -178,9 +258,9 @@ function getOption(data, dates) {
         }
       },
       {
-        name: "MA5",
+        name: "MA20",
         type: "line",
-        data: calculateMA(5, data),
+        data: calculateMA(20, data),
         smooth: true,
         showSymbol: false,
         lineStyle: {
