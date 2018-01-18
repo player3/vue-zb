@@ -3,6 +3,7 @@ import Router from 'vue-router'
 import ElementUI from 'element-ui'
 import HelloWorld from '@/components/HelloWorld'
 import Chart from '@/components/Chart'
+import Bitfinex from '@/components/Bitfinex'
 import Data from '@/components/Data'
 import ECharts from 'vue-echarts/components/ECharts.vue'
 import 'element-ui/lib/theme-chalk/index.css'
@@ -38,6 +39,11 @@ export default new Router({
       path: '/chart',
       name: 'Chart',
       component: Chart
+    },
+    {
+      path: '/bitfinex',
+      name: 'Bitfinex',
+      component: Bitfinex
     },
     {
       path: '/data',

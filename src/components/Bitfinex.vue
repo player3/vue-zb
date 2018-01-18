@@ -51,6 +51,7 @@
       <el-form-item label="时间范围">
             <el-date-picker
             format="yyyy/MM/dd"
+            value-format="yyyy/MM/dd"
       v-model="form.begin"
       type="date"
       placeholder="开始日期">
@@ -58,12 +59,16 @@
      - 
             <el-date-picker
             format="yyyy/MM/dd"
+            value-format="yyyy/MM/dd"
       v-model="form.end"
       type="date"
       placeholder="结束日期">
     </el-date-picker>
       </el-form-item>
     </el-form>
+
+  <el-button type="primary" @click="rollback">回测</el-button>
+  <chart :options="rollback_option" style='margin:12px 0;'></chart>
         
 
 
@@ -110,25 +115,36 @@ export default {
         buy_rate: "0.04",
         begin: "2017/11/01",
         end: "2017/12/01"
-      }
+      },
+      rollback_option: {}
     };
   },
   methods: {
-    test(data, begin_date, end_date, buy_rate, sell_rate){
+    rollback() {
+      var result = this.test(
+        this.table,
+        this.form.begin,
+        this.form.end,
+        this.form.buy_rate,
+        this.form.sell_rate
+      );
+      this.rollback_option = getRollbackData(result);
+    },
+    test(data, begin_date, end_date, buy_rate, sell_rate) {
       var money = 10000;
       var coin = 0;
       var total = money;
       var result = [];
-      var begin = data.findIndex(item=>item["date"] == begin_date);
-      var end = data.findIndex(item=>item["date"] == end_date);
-      for(var i=begin; i<=end; i++){
-        if(data[i].diff >= buy_rate){
+      var begin = data.findIndex(item => item["date"] == begin_date);
+      var end = data.findIndex(item => item["date"] == end_date);
+      for (var i = begin; i <= end; i++) {
+        if (data[i].diff >= buy_rate && money > 0) {
           coin = money / data[i]["close"];
           money = 0;
         }
-        if(data[i].diff <= sell_rate){
-          coin = 0;
+        if (data[i].diff <= sell_rate && coin > 0) {
           money = coin * data[i]["close"];
+          coin = 0;
         }
         total = money + coin * data[i]["close"];
         result.push({
@@ -149,26 +165,26 @@ export default {
           let data = rawData.map(item => {
             return [item[1], item[2], item[4], item[3]];
           });
-          this.table = rawData
-            .map(item => {
-              return {
-                date: moment(item[0]).format("YYYY/MM/DD"),
-                open: item[1],
-                close: item[2],
-                lowest: item[4],
-                highest: item[3]
-              };
-            });
+          this.table = rawData.map(item => {
+            return {
+              date: moment(item[0]).format("YYYY/MM/DD"),
+              open: item[1],
+              close: item[2],
+              lowest: item[4],
+              highest: item[3]
+            };
+          });
           var ma20 = calculateMA(20, data);
           this.table.forEach((value, index) => {
-            if(ma20[index] == "-")
-              return;
+            if (ma20[index] == "-") return;
             value["ma"] = ma20[index].toFixed(3);
             value["diff"] = ((value["close"] - ma20[index]) /
               value["close"]
             ).toFixed(3);
             value["flag"] =
-              value["diff"] >= 0.04 ? "buy" : (value["diff"] <= -0.06 ? "sell" : "");
+              value["diff"] >= 0.04
+                ? "buy"
+                : value["diff"] <= -0.06 ? "sell" : "";
           });
           window.json = this.table;
           this.polar = getOption(data, dates);
@@ -181,6 +197,60 @@ export default {
     }
   }
 };
+
+function getRollbackData(data) {
+  var category = data.map(m=>m.date);
+  var value = data.map(m=>m.money);
+  var option = {
+    title: {
+      text: "回测数据",
+      subtext: "BTC-USD"
+    },
+    tooltip: {
+      trigger: "axis"
+    },
+    legend: {
+      data: ["资产总值"]
+    },
+    toolbox: {
+      show: true,
+      feature: {
+        dataZoom: {
+          yAxisIndex: "none"
+        },
+        dataView: { readOnly: false },
+        magicType: { type: ["line", "bar"] },
+        restore: {},
+        saveAsImage: {}
+      }
+    },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: category
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        formatter: "{value} $"
+      }
+    },
+    series: [
+      {
+        name: "资产总值",
+        type: "line",
+        data: value,
+        markPoint: {
+          data: [{ type: "max", name: "最大值" }]
+        },
+        markLine: {
+          data: [{ type: "average", name: "平均值" }]
+        }
+      }
+    ]
+  };
+  return option;
+}
 
 function getOption(data, dates) {
   var option = {
