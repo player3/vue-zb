@@ -1,43 +1,23 @@
 <template>
-<div style="padding:24px; text-align:left;">
+  <div style="padding:24px; text-align:left;">
 
-
-  <chart :options="polar"></chart>
-      <el-table
-      :data="table" border
-      style="width: 600px; text-align:left; margin:24px 0;" height="420">
-      <el-table-column
-        prop="date"
-        label="date"
-        width="120">
+    <chart :options="polar"></chart>
+    <el-table :data="table" border style="width: 100%; text-align:left; margin:24px 0;" height="420">
+      <el-table-column prop="date" label="时间" width="120">
       </el-table-column>
-      <el-table-column
-        prop="open"
-        label="open">
+      <el-table-column prop="open" label="开盘价">
       </el-table-column>
-      <el-table-column
-        prop="close"
-        label="close">
+      <el-table-column prop="close" label="收盘价">
       </el-table-column>
-      <el-table-column
-        prop="lowest"
-        label="lowest">
+      <el-table-column prop="lowest" label="最低价">
       </el-table-column>
-      <el-table-column
-        prop="highest"
-        label="highest">
+      <el-table-column prop="highest" label="最高价">
       </el-table-column>
-      <el-table-column
-        prop="ma"
-        label="MA20">
+      <el-table-column prop="ma" label="MA20">
       </el-table-column>
-      <el-table-column
-        prop="diff"
-        label="diff">
+      <el-table-column prop="diff" label="diff">
       </el-table-column>
-      <el-table-column
-        prop="flag"
-        label="flag">
+      <el-table-column prop="flag" label="建议操作">
       </el-table-column>
     </el-table>
     策略定义：
@@ -49,30 +29,18 @@
         <el-input v-model="form.sell_rate"></el-input>
       </el-form-item>
       <el-form-item label="时间范围">
-            <el-date-picker
-            format="yyyy/MM/dd"
-            value-format="yyyy/MM/dd"
-      v-model="form.begin"
-      type="date"
-      placeholder="开始日期">
-    </el-date-picker>
-     - 
-            <el-date-picker
-            format="yyyy/MM/dd"
-            value-format="yyyy/MM/dd"
-      v-model="form.end"
-      type="date"
-      placeholder="结束日期">
-    </el-date-picker>
+        <el-date-picker format="yyyy-MM-dd" value-format="yyyy-MM-dd" v-model="form.begin" type="datetime" placeholder="开始日期">
+        </el-date-picker>
+        -
+        <el-date-picker format="yyyy-MM-dd" value-format="yyyy-MM-dd" v-model="form.end" type="datetime" placeholder="结束日期">
+        </el-date-picker>
       </el-form-item>
     </el-form>
 
-  <el-button type="primary" @click="rollback">回测</el-button>
-  <chart :options="rollback_option" style='margin:12px 0;'></chart>
-        
+    <el-button type="primary" @click="rollback">回测</el-button>
+    <chart :options="rollback_option" style='margin:12px 0;'></chart>
 
-
-</div>
+  </div>
 </template>
 
 <script>
@@ -97,13 +65,19 @@ function calculateMA(dayCount, data) {
 
 export default {
   mounted() {
-    this.setSource();
+    this.setSource("1m").then(response => {
+      let { data, dates, table } = response;
+      this.table = table;
+      this.polar = getOption(data, dates);
+    });
   },
   data: function() {
     return {
       options: [
         { label: "比特币", value: "btc_usdt" },
-        { label: "莱特币", value: "ltc_usdt" }
+        { label: "莱特币", value: "ltc_usdt" },
+        { label: "HSR", value: "hsr_usdt" },
+        { label: "EOS", value: "eos_usdt" }
       ],
       source: "ltc_usdt",
       channel: "",
@@ -113,22 +87,25 @@ export default {
       form: {
         sell_rate: "-0.06",
         buy_rate: "0.04",
-        begin: "2017/11/01",
-        end: "2017/12/01"
+        begin: "2017-11-01",
+        end: "2017-12-01"
       },
       rollback_option: {}
     };
   },
   methods: {
     rollback() {
-      var result = this.test(
-        this.table,
-        this.form.begin,
-        this.form.end,
-        this.form.buy_rate,
-        this.form.sell_rate
-      );
-      this.rollback_option = getRollbackData(result);
+      this.setSource("1D").then(response => {
+        let { table } = response;
+        var result = this.test(
+          table,
+          this.form.begin,
+          this.form.end,
+          this.form.buy_rate,
+          this.form.sell_rate
+        );
+        this.rollback_option = getRollbackData(result);
+      });
     },
     test(data, begin_date, end_date, buy_rate, sell_rate) {
       var money = 10000;
@@ -137,7 +114,11 @@ export default {
       var result = [];
       var begin = data.findIndex(item => item["date"] == begin_date);
       var end = data.findIndex(item => item["date"] == end_date);
+      var origin = money / data[begin]["close"];
       for (var i = begin; i <= end; i++) {
+        if (!data[i]) {
+          continue;
+        }
         if (data[i].diff >= buy_rate && money > 0) {
           coin = money / data[i]["close"];
           money = 0;
@@ -148,59 +129,63 @@ export default {
         }
         total = money + coin * data[i]["close"];
         result.push({
+          origin: data[i]["close"] * origin,
           date: data[i]["date"],
           money: total
         });
       }
       return result;
     },
-    setSource() {
-      let source = this.source;
-      this.channel = source.replace("_", "") + "_ticker";
-      axios
-        .get("https://api.bitfinex.com/v2/candles/trade:1D:tBTCUSD/hist")
-        .then(response => {
-          let rawData = response.data.reverse();
-          let dates = rawData.map(item => moment(item[0]).format("YYYY/MM/DD"));
-          let data = rawData.map(item => {
-            return [item[1], item[2], item[4], item[3]];
+    setSource(d) {
+      return new Promise((resolve, reject) => {
+        d = d || "1m";
+        let format = "YYYY-MM-DD HH:mm:ss";
+        if (d === "1D") {
+          format = "YYYY-MM-DD";
+        }
+        let source = this.source;
+        this.channel = source.replace("_", "") + "_ticker";
+        axios
+          .get(`https://api.bitfinex.com/v2/candles/trade:${d}:tBTCUSD/hist`)
+          .then(response => {
+            let rawData = response.data.reverse();
+            let dates = rawData.map(item => moment(item[0]).format(format));
+            let data = rawData.map(item => {
+              return [item[1], item[2], item[4], item[3]];
+            });
+            let table = rawData.map(item => {
+              return {
+                date: moment(item[0]).format(format),
+                open: item[1],
+                close: item[2],
+                lowest: item[4],
+                highest: item[3]
+              };
+            });
+            var ma20 = calculateMA(20, data);
+            table.forEach((value, index) => {
+              if (ma20[index] == "-") return;
+              value["ma"] = ma20[index].toFixed(3);
+              value["diff"] = (
+                (value["close"] - ma20[index]) /
+                value["close"]
+              ).toFixed(3);
+              value["flag"] =
+                value["diff"] >= 0.04
+                  ? "buy"
+                  : value["diff"] <= -0.06 ? "sell" : "";
+            });
+            resolve({ data, dates, table });
           });
-          this.table = rawData.map(item => {
-            return {
-              date: moment(item[0]).format("YYYY/MM/DD"),
-              open: item[1],
-              close: item[2],
-              lowest: item[4],
-              highest: item[3]
-            };
-          });
-          var ma20 = calculateMA(20, data);
-          this.table.forEach((value, index) => {
-            if (ma20[index] == "-") return;
-            value["ma"] = ma20[index].toFixed(3);
-            value["diff"] = ((value["close"] - ma20[index]) /
-              value["close"]
-            ).toFixed(3);
-            value["flag"] =
-              value["diff"] >= 0.04
-                ? "buy"
-                : value["diff"] <= -0.06 ? "sell" : "";
-          });
-          window.json = this.table;
-          this.polar = getOption(data, dates);
-        });
-
-      let data = {
-        event: "addChannel",
-        channel: this.channel
-      };
+      });
     }
   }
 };
 
 function getRollbackData(data) {
-  var category = data.map(m=>m.date);
-  var value = data.map(m=>m.money);
+  var category = data.map(m => m.date);
+  var value = data.map(m => m.money);
+  var origin = data.map(m => m.origin);
   var option = {
     title: {
       text: "回测数据",
@@ -210,7 +195,7 @@ function getRollbackData(data) {
       trigger: "axis"
     },
     legend: {
-      data: ["资产总值"]
+      data: ["原始收益", "策略收益"]
     },
     toolbox: {
       show: true,
@@ -237,7 +222,18 @@ function getRollbackData(data) {
     },
     series: [
       {
-        name: "资产总值",
+        name: "原始收益",
+        type: "line",
+        data: origin,
+        markPoint: {
+          data: [{ type: "max", name: "最大值" }]
+        },
+        markLine: {
+          data: [{ type: "average", name: "平均值" }]
+        }
+      },
+      {
+        name: "策略收益",
         type: "line",
         data: value,
         markPoint: {
