@@ -1,6 +1,9 @@
 <template>
   <div style="padding:24px; text-align:left;">
-
+    <el-select v-model="time_option" placeholder="请选择" @change="timeOptionChange">
+      <el-option v-for="item in time_options" :key="item.value" :label="item.label" :value="item.value">
+      </el-option>
+    </el-select>
     <chart :options="polar"></chart>
     <el-table :data="table" border style="width: 100%; text-align:left; margin:24px 0;" height="420">
       <el-table-column prop="date" label="时间" width="120">
@@ -79,6 +82,17 @@ export default {
         { label: "HSR", value: "hsr_usdt" },
         { label: "EOS", value: "eos_usdt" }
       ],
+      time_option: "1m",
+      time_options: [
+        {
+          label: "按天",
+          value: "1D"
+        },
+        {
+          label: "按分",
+          value: "1m"
+        }
+      ],
       source: "ltc_usdt",
       channel: "",
       polar: {},
@@ -94,6 +108,13 @@ export default {
     };
   },
   methods: {
+    timeOptionChange() {
+      this.setSource(this.time_option).then(response => {
+        let { data, dates, table } = response;
+        this.table = table;
+        this.polar = getOption(data, dates);
+      });
+    },
     rollback() {
       this.setSource("1D").then(response => {
         let { table } = response;
@@ -115,6 +136,8 @@ export default {
       var begin = data.findIndex(item => item["date"] == begin_date);
       var end = data.findIndex(item => item["date"] == end_date);
       var origin = money / data[begin]["close"];
+      console.log(begin);
+      console.log(end);
       for (var i = begin; i <= end; i++) {
         if (!data[i]) {
           continue;
