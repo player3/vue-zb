@@ -42,6 +42,24 @@
 
     <el-button type="primary" @click="rollback">回测</el-button>
     <chart :options="rollback_option" style='margin:12px 0;'></chart>
+    <el-table :data="rollback_table" border style="width: 100%; text-align:left; margin:24px 0;" height="420">
+      <el-table-column prop="date" label="时间" width="120">
+      </el-table-column>
+      <el-table-column prop="open" label="开盘价">
+      </el-table-column>
+      <el-table-column prop="close" label="收盘价">
+      </el-table-column>
+      <el-table-column prop="lowest" label="最低价">
+      </el-table-column>
+      <el-table-column prop="highest" label="最高价">
+      </el-table-column>
+      <el-table-column prop="ma" label="MA20">
+      </el-table-column>
+      <el-table-column prop="diff" label="diff">
+      </el-table-column>
+      <el-table-column prop="flag" label="建议操作">
+      </el-table-column>
+    </el-table>
 
   </div>
 </template>
@@ -98,9 +116,10 @@ export default {
       polar: {},
       ticker: {},
       table: [],
+      rollback_table: [],
       form: {
-        sell_rate: "-0.06",
-        buy_rate: "0.04",
+        sell_rate: -0.06,
+        buy_rate: 0.04,
         begin: "2017-11-01",
         end: "2017-12-01"
       },
@@ -125,6 +144,7 @@ export default {
           this.form.buy_rate,
           this.form.sell_rate
         );
+        this.rollback_table = table;
         this.rollback_option = getRollbackData(result);
       });
     },
@@ -194,9 +214,9 @@ export default {
                 value["close"]
               ).toFixed(3);
               value["flag"] =
-                value["diff"] >= 0.04
+                parseFloat(value["diff"]) >= parseFloat(this.form.buy_rate)
                   ? "buy"
-                  : value["diff"] <= -0.06 ? "sell" : "";
+                  : parseFloat(value["diff"]) <= parseFloat(this.form.sell_rate) ? "sell" : "";
             });
             resolve({ data, dates, table });
           });
