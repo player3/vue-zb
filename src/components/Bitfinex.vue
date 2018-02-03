@@ -162,21 +162,27 @@ export default {
         if (!data[i]) {
           continue;
         }
-        if (data[i].diff >= buy_rate && money > 0) {
+        if (parseFloat(data[i].diff) >= parseFloat(buy_rate) && money > 0) {
           coin = money / data[i]["close"];
           money = 0;
         }
-        if (data[i].diff <= sell_rate && coin > 0) {
+        if (parseFloat(data[i].diff) <= parseFloat(sell_rate) && coin > 0) {
           money = coin * data[i]["close"];
           coin = 0;
         }
         total = money + coin * data[i]["close"];
         result.push({
+          diff: data[i].diff,
+          buy_rate,
+          sell_rate,
           origin: data[i]["close"] * origin,
           date: data[i]["date"],
+          origin_coin: origin,
+          coin: coin,
           money: total
         });
       }
+      console.log(result);
       return result;
     },
     setSource(d) {
