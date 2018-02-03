@@ -86,6 +86,9 @@ function calculateMA(dayCount, data) {
 
 export default {
   mounted() {
+    setInterval(()=>{
+      //this.getTicker();
+    }, 10000);
     this.setSource("1m").then(response => {
       let { data, dates, table } = response;
       this.table = table;
@@ -184,6 +187,12 @@ export default {
       }
       console.log(result);
       return result;
+    },
+    getTicker(){
+      axios.get('https://api.bitfinex.com/v2/ticker/tBTCUSD')
+      .then(res => {
+        console.log(res);
+      });
     },
     setSource(d) {
       return new Promise((resolve, reject) => {
